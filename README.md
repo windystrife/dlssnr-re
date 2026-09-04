@@ -13,7 +13,7 @@ tool operates on files you already have on your own machine.
 |---|---|---|
 | How does the shim work? | Proxies `version.dll`, inline-detours D3D12 + FidelityFX, hijacks the game's FSR3 upscale pass | `dlssnr_pe.py imports/strings` |
 | Where do the weights come from? | The `WEIGHTS_HT` resource inside the user's own `nvngx_dlssnr.dll` (147,695,410 B) | `dlssnr_pe.py resources` |
-| What is the weight format? | Self-describing container; a correct walk consumes **100.000%** of the blob → 153 tensors | `dlssnr_weights.py list` |
+| What is the weight format? | Self-describing container; a correct walk consumes **100.000%** of the blob → 153 tensors, and every tensor's redundant length field agrees (**153/153**) | `dlssnr_weights.py check` |
 | What dtype? | **Mixed**: FP8 E4M3 transformer core (blocks 15–55), FP16 conv shell (blocks 0–14, 56–70) | `dlssnr_weights.py verify` |
 | What is the network? | Symmetric U-Net, dim-512 transformer stage, dim-1024 bottleneck, ~146.1M parameters | `dlssnr_weights.py topology` |
 | Which GPUs are supported? | gfx1100/1101/1102 (RDNA3) and gfx1201 (RDNA4). **gfx1200 is absent** | `dlssnr_bundle.py split` |
@@ -61,8 +61,10 @@ python tools/dlssnr_isa.py loops dis_gfx1201.txt
 
 # 7. the weights (supply your own nvngx_dlssnr.dll)
 python tools/dlssnr_pe.py extract nvngx_dlssnr.dll --resource WEIGHTS_HT --out weights_ht.bin
+python tools/dlssnr_weights.py check    weights_ht.bin
 python tools/dlssnr_weights.py verify   weights_ht.bin
 python tools/dlssnr_weights.py topology weights_ht.bin
+python tools/dlssnr_weights.py export   weights_ht.bin -o npy/ --limit 10
 
 # 8. once you have actually run the mod, turn its log into numbers
 python tools/dlssnr_bench.py MyGame_dlssnr_on_amd.log
@@ -75,7 +77,7 @@ python tools/dlssnr_bench.py before.log after.log --compare
 |---|---|
 | `dlssnr_pe.py` | PE64 parser: sections, strings, imports, exports, resources, extraction |
 | `dlssnr_bundle.py` | Splits clang offload bundles; reads AMDGPU msgpack for VGPR/SGPR/LDS/scratch/spill/arg-struct size |
-| `dlssnr_weights.py` | Walks the weight container; classifies dtype per tensor; prints the topology |
+| `dlssnr_weights.py` | Walks the weight container; proves the layout numerically; classifies dtype per tensor; prints the topology; exports to `.npy` |
 | `disasm_comgr.ps1` | Disassembles AMDGPU code objects via `amd_comgr` P/Invoke — no toolchain install |
 | `dlssnr_isa.py` | WMMA census, LDS access-width breakdown, opcode histogram, loop detection, A/B diff |
 | `dlssnr_bench.py` | Parses the mod's runtime log; median/p99, rejects confounded windows, Mann-Whitney compare |
@@ -93,6 +95,17 @@ because the model is not uniformly FP8. The discriminator is parity entropy, not
 for FP16 little-endian the low byte is near-uniform while the high byte is concentrated, so
 `H(even) − H(odd)` is large; a byte-granular stream collapses it. On this model the split is clean —
 largest gap among FP8 `0.040`, smallest among FP16 `0.538`, a **13.5× margin**.
+
+## Statistical vs numerical evidence
+
+`verify` is a *statistical* argument: it infers dtype from byte distributions. `check` is a
+*numerical* one. Each tensor record ends in a redundant u32 equal to `payload_size / 2`, so a walk
+whose stride is wrong by even one byte lands every subsequent tensor on garbage and the invariant
+collapses. On the shipped blob it holds **153/153** while the walk consumes **147,695,410 of
+147,695,410 bytes**. That is what makes the container claim a fact rather than a good guess.
+
+(The field is a length in halfwords, not a shape. It carries no dimension information — the layer
+dimensions in `docs/FINDINGS.md` come from factoring the exact byte counts instead.)
 
 ## A caveat that travels with every number here
 

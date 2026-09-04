@@ -13,13 +13,16 @@ Container layout (recovered by exact-byte accounting; a correct walk consumes
       u64  b
       u64  c                   # payload bytes
       u32  flag                # 1
-      u8   data[c]             # FP8 E4M3, one byte per element
+      u8   data[c]             # FP8 E4M3 or FP16 - see `verify`
       u64  pad                 # 0
       u64  one                 # 1
-      u32  shape_hint          # two u16 fields
+      u32  len_halfwords      # payload bytes / 2 -- a redundant length field
 
-`verify` is the important subcommand: it re-derives the dtype from the data
-rather than trusting this docstring. The discriminator is byte parity. If the
+`check` proves the layout numerically: the trailing u32 equals payload_size/2 for
+every tensor, so a walk that is wrong by even one byte anywhere breaks it for all
+subsequent tensors. On the shipped blob it holds 153/153.
+
+`verify` re-derives the dtype from the data rather than trusting this docstring. The discriminator is byte parity. If the
 stream were FP16 little-endian, the low byte would be near-uniform (~8 bits of
 entropy) while the high byte stayed concentrated; matching distributions on
 both parities mean the stream is byte-granular.
@@ -29,12 +32,15 @@ redistribute weights - supply your own legally obtained DLL.
 
 Usage
 -----
-  python dlssnr_weights.py list    weights_ht.bin
+  python dlssnr_weights.py check    weights_ht.bin        # prove the layout
+  python dlssnr_weights.py verify   weights_ht.bin        # classify dtypes
   python dlssnr_weights.py topology weights_ht.bin
-  python dlssnr_weights.py verify  weights_ht.bin
+  python dlssnr_weights.py list     weights_ht.bin
+  python dlssnr_weights.py export   weights_ht.bin -o npy/ --limit 10
 """
 import argparse
 import collections
+import json
 import math
 import re
 import struct
@@ -58,9 +64,9 @@ def walk(blob):
         a, b, c = struct.unpack_from("<QQQ", blob, q)
         flag, = struct.unpack_from("<I", blob, q + 24)
         data = q + 28
-        hint = struct.unpack_from("<HH", blob, data + c + 16)
+        lo, hi = struct.unpack_from("<HH", blob, data + c + 16)
         ents.append(dict(name=name, a=a, b=b, size=c, flag=flag,
-                         data=data, hint=hint))
+                         data=data, halfwords=lo | (hi << 16)))
         p = data + c + 20
     return ents, p
 
@@ -85,7 +91,9 @@ def entropy(counter):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["list", "topology", "verify"])
+    ap.add_argument("cmd", choices=["list", "topology", "verify", "check", "export"])
+    ap.add_argument("-o", "--out", help="export: output directory")
+    ap.add_argument("--limit", type=int, help="export: only the N largest tensors")
     ap.add_argument("blob")
     a = ap.parse_args()
     with open(a.blob, "rb") as fh:
@@ -103,7 +111,7 @@ def main():
 
     if a.cmd == "list":
         for e in sorted(ents, key=lambda x: -x["size"]):
-            print(f"  {e['name']:34} {e['size']:>12,}  hint={e['hint'][0]}x{e['hint'][1]}")
+            print(f"  {e['name']:34} {e['size']:>12,}  halfwords={e['halfwords']:>10,}")
 
     elif a.cmd == "topology":
         by = collections.defaultdict(dict)
@@ -186,6 +194,63 @@ def main():
         print(f"\nworked example - {big['name']} ({big['size']:,} B) decoded as FP8 E4M3:")
         print(f"  mean {sum(finite) / len(finite):+.5f}  "
               f"|max| {max(abs(v) for v in finite):.4f}  NaNs {len(vals) - len(finite)}")
+
+    elif a.cmd == "check":
+        # Numerical proof of the container layout, independent of any dtype claim.
+        # The trailing u32 is payload_size/2. If the walk's stride were wrong by a
+        # single byte anywhere, every later tensor would land on garbage and fail.
+        ok = sum(1 for e in ents if e["halfwords"] * 2 == e["size"])
+        print(f"invariant  len_halfwords * 2 == payload_size")
+        print(f"  holds {ok}/{len(ents)} tensors")
+        for e in ents:
+            if e["halfwords"] * 2 != e["size"]:
+                print(f"    FAIL {e['name']:30} size={e['size']:,} "
+                      f"halfwords={e['halfwords']:,}")
+        if ok == len(ents) and consumed == len(blob):
+            print("\n  PASS - the walk consumed the blob exactly AND every tensor's")
+            print("  redundant length field agrees. The layout is confirmed numerically,")
+            print("  not just statistically.")
+        else:
+            print("\n  FAIL - the layout assumption is wrong somewhere.")
+
+    elif a.cmd == "export":
+        # Decodes YOUR OWN weights to .npy for offline study. Writes nothing that
+        # was not already on your disk; do not redistribute the output.
+        import os
+        try:
+            import numpy as np
+        except ImportError:
+            raise SystemExit("export needs numpy: pip install numpy")
+        if not a.out:
+            raise SystemExit("export needs -o OUTDIR")
+        os.makedirs(a.out, exist_ok=True)
+
+        # E4M3 -> float32 lookup, built once
+        lut = np.array([e4m3(i) for i in range(256)], dtype=np.float32)
+
+        sel = sorted(ents, key=lambda e: -e["size"])
+        if a.limit:
+            sel = sel[:a.limit]
+        manifest = []
+        for e in sel:
+            raw = np.frombuffer(blob, dtype=np.uint8, count=e["size"], offset=e["data"])
+            ev = entropy(collections.Counter(raw[0::2].tolist()))
+            od = entropy(collections.Counter(raw[1::2].tolist())) if e["size"] > 1 else ev
+            if (ev - od) > 0.35 and len(set(raw[0::2].tolist())) >= 250:
+                dtype, arr = "float16", raw.view(np.float16).astype(np.float32)
+            else:
+                dtype, arr = "float8_e4m3", lut[raw]
+            path = os.path.join(a.out, e["name"] + ".npy")
+            np.save(path, arr)
+            manifest.append(dict(name=e["name"], bytes=e["size"],
+                                 elements=int(arr.size), dtype=dtype,
+                                 mean=float(arr.mean()), absmax=float(np.abs(arr).max())))
+            print(f"  {e['name']:32} {dtype:12} {arr.size:>10,} elems -> {path}")
+        with open(os.path.join(a.out, "manifest.json"), "w") as fh:
+            json.dump(manifest, fh, indent=2)
+        print(f"\n{len(manifest)} tensors + manifest.json -> {a.out}")
+        print("These are NVIDIA's trained weights decoded from your own DLL. Local")
+        print("research only - do not redistribute.")
 
 
 if __name__ == "__main__":
