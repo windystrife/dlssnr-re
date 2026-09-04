@@ -1,0 +1,31 @@
+KERNEL                                    ds ops  narrow    b32    b64   b128   B/op  narrow%
+k_swin_1h_32_fp810SwinP                      308     278      8      0     22    3.0      90%
+k_pre_block_1h_32_fp89PreP                   316     281     10      0     24    3.2      89%
+k_post_block_1h_32_fp810PostP                311     278      7      4     22    3.1      89%
+k_ffwd10FfwdP                                 26      17      7      0      2    3.3      65%
+k_conv_res10ConvP                              4       1      3      0      0    3.2      25%
+k_qkv_attn10AttnP                            211     186      7      0     18    3.2      88%
+k_ffwd211Ffwd2P                               50      40     10      0      0    1.6      80%
+k_qkv_attn210AttnP                           113      90     14      9      0    2.7      80%
+k_expand12ExpandP                              4       1      3      0      0    3.2      25%
+k_conv_splitk12ConvP1d                        17      17      0      0      0    2.0     100%
+k_qkv9QkvP                                    35      27      0      0      8    5.2      77%
+k_attention12AttnP1d                          95      75     14      0      6    3.2      79%
+k_contract212ConvP1d                          65      65      0      0      0    2.0     100%
+k_qkv29QkvP                                  126     120      4      2      0    2.2      95%
+k_attention212AttnP1d                         56      29     24      3      0    3.1      52%
+k_ffwd_inpview12FfwdPlP                       25      17      6      0      2    3.2      68%
+k_conv_res_views12ConvPlP                     16      13      3      0      0    2.3      81%
+k_final_head10HeadP                            4       1      3      0      0    3.2      25%
+k_dec_upsample11DecUpP                         5       5      0      0      0    2.0     100%
+k_mean10MeanP                                 19       0     19      0      0    4.0       0%
+k_swin_varILi32ELb1EEv9VarP                  190     160     21      5      4    2.4      84%
+k_swin_varILi32ELb0EEv9VarP                  200     170     21      5      4    2.4      85%
+k_swin_varILi64ELb0EEv9VarP                  212     183     23      4      2    2.2      86%
+k_swin_varILi128ELb0EEv9VarP                 195     169     20      4      2    2.1      87%
+k_swin_varILi256ELb0EEv9VarP                 195     169     20      4      2    2.1      87%
+
+RDNA banks LDS in 32-bit words: a 16-bit access still costs a full bank
+cycle, so sub-dword traffic caps near 50% of peak LDS bandwidth (25% for
+bytes). A high narrow% with a low B/op is the signature of unpacking FP8
+tiles one or two bytes at a time.

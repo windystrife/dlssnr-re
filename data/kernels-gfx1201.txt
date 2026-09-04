@@ -1,0 +1,43 @@
+
+=== bundle-gfx1201.bin : 33 kernels ===
+KERNEL                                                   CODE  VGPR  SGPR      LDS   LDS%  SCRATCH  SPILL    WG  ARGSZ
+_Z21k_pre_block_1h_32_fp89PreParams                     29436    72    44    64640  98.6%        0      0   256     80 <
+_Z16k_swin_1h_32_fp810SwinParams                        24196    72    25    62592  95.5%        0      0   256     40 <
+_Z22k_post_block_1h_32_fp810PostParams                  27920    70    43    62592  95.5%        0      0   256     80 <
+_Z10k_qkv_attn10AttnParams                              16492    94    30    58368  89.1%        0      0   256     40 <
+_Z11k_attention12AttnParams1d                            7124    79    32    28928  44.1%        0      0   256     40
+_Z6k_ffwd10FfwdParams                                    6420    60    19    24576  37.5%        0      0   256     32
+_Z14k_ffwd_inpview12FfwdPlParams                         5136    60    20    24576  37.5%        0      0   256     32
+_Z16k_conv_res_views12ConvPlParams                       7292    90    49    24576  37.5%        0      0   256     72
+_Z11k_qkv_attn210AttnParams                             10204    99    33    23808  36.3%       24      0   256     40
+_Z7k_ffwd211Ffwd2Params                                 11236    90    41    21504  32.8%        0      0   256     48
+_Z12k_attention212AttnParams1d                           7804    79    46    19456  29.7%        0      0   256     40
+_Z10k_swin_varILi256ELb0EEv9VarParams                   29928   120    60    19200  29.3%       24      0   256    168
+_Z8k_expand12ExpandParams                                5292    41    19    16384  25.0%        0      0   256     24
+_Z11k_contract212ConvParams1d                           19364   170    55    16384  25.0%        0      0   256     48
+_Z10k_swin_varILi32ELb0EEv9VarParams                    35844    76    67    15632  23.9%       24      0   256    168
+_Z10k_swin_varILi32ELb1EEv9VarParams                    35864    81    82    15616  23.8%       24      0   256    168
+_Z10k_swin_varILi64ELb0EEv9VarParams                    30096   120    61    15616  23.8%       24      0   256    168
+_Z10k_swin_varILi128ELb0EEv9VarParams                   29936   120    60    15616  23.8%       24      0   256    168
+_Z6k_qkv29QkvParams                                      9148    96    20    12800  19.5%        0      0   256     40
+_Z10k_conv_res10ConvParams                               3696    60    17     8192  12.5%        0      0   256     40
+_Z12k_final_head10HeadParams                             3320    42    16     8192  12.5%        0      0   256     24
+_Z5k_qkv9QkvParams                                       6148   119    40     6144   9.4%        0      0   256     40
+_Z13k_conv_splitk12ConvParams1d                          7496    82    31     4096   6.2%        0      0   256     48
+_Z14k_dec_upsample11DecUpParams                          3368    51    20     4096   6.2%        0      0   256     40
+_Z6k_mean10MeanParams                                    1272     8    17     1024   1.6%        0      0  1024     32
+_Z11k_conv_res211Conv2Params                            23700   203   107        0   0.0%        0      0   256     64
+_Z9k_expand212ExpandParams                              10520   162    20        0   0.0%        0      0   256     24
+_Z8k_repack12RepackParams                                1032    15    21        0   0.0%        0      0  1024     32
+_Z8k_import12ImportParams                                5380    20    18        0   0.0%        0      0  1024     48
+_Z8k_export12ExportParams                                6092    26    17        0   0.0%        0      0  1024     64
+_Z11k_reproject12ReprojParams                           12992    63    41        0   0.0%        0      0  1024    128
+_Z11k_flag_waitPjjj                                       124     2     8        0   0.0%        0      0  1024      8
+_Z10k_flag_setPjj                                         124     2     3        0   0.0%        0      0  1024      8
+TOTAL code                                             433996
+
+  4 kernel(s) at >=85% of the 65536 B LDS ceiling -> pinned to 2 workgroups/WGP = 4 of 16 waves/SIMD (25%):
+    _Z21k_pre_block_1h_32_fp89PreParams  LDS=64640  VGPR=72
+    _Z16k_swin_1h_32_fp810SwinParams  LDS=62592  VGPR=72
+    _Z22k_post_block_1h_32_fp810PostParams  LDS=62592  VGPR=70
+    _Z10k_qkv_attn10AttnParams  LDS=58368  VGPR=94

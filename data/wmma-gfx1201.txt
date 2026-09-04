@@ -1,0 +1,39 @@
+KERNEL                                            insn  fp8 WMMA  f16 WMMA  other mtx
+k_swin_1h_32_fp810SwinP                          4,340         0        14          0
+k_pre_block_1h_32_fp89PreP                       5,189         0        19          0
+k_post_block_1h_32_fp810PostP                    5,080         0        14          0
+k_ffwd10FfwdP                                    1,096         6         2          0
+k_conv_res10ConvP                                  620         2         0          0
+k_qkv_attn10AttnP                                2,913         2         6          0
+k_ffwd211Ffwd2P                                  1,949        12         0          0
+k_conv_res211Conv2P                              4,353         8         0          0
+k_qkv_attn210AttnP                               1,787        12         2          0
+k_expand12ExpandP                                  925         2         0          0
+k_conv_splitk12ConvP1d                           1,353         0         1          0
+k_qkv9QkvP                                       1,048         0         3          0
+k_attention12AttnP1d                             1,231         0         6          0
+k_expand212ExpandP                               1,786         8         0          0
+k_contract212ConvP1d                             3,289         4         0          0
+k_qkv29QkvP                                      1,490        16         0          0
+k_attention212AttnP1d                            1,338         6         0          0
+k_ffwd_inpview12FfwdPlP                            898         6         2          0
+k_conv_res_views12ConvPlP                        1,357         2         0          0
+k_final_head10HeadP                                568         2         0          0
+k_repack12RepackP                                  197         0         0          0
+k_dec_upsample11DecUpP                             628         0         2          0
+k_mean10MeanP                                      249         0         0          0
+k_import12ImportP                                  994         0         0          0
+k_export12ExportP                                1,104         0         0          0
+k_reproject12ReprojP                             2,414         0         0          0
+k_flag_waitPjjj                                     27         0         0          0
+k_flag_setPjj                                       18         0         0          0
+k_swin_varILi32ELb1EEv9VarP                      6,470        26         0          0
+k_swin_varILi32ELb0EEv9VarP                      6,490        26         0          0
+k_swin_varILi64ELb0EEv9VarP                      5,314        38         0          0
+k_swin_varILi128ELb0EEv9VarP                     5,290        32         0          0
+k_swin_varILi256ELb0EEv9VarP                     5,288        32         0          0
+
+=== matrix instruction totals ===
+  v_wmma_f32_16x16x16_fp8_fp8                      242
+  v_wmma_f32_16x16x16_f16                           66
+  v_dot2_f32_f16                                     5
