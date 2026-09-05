@@ -408,3 +408,62 @@ Recover `VarParams` (168 B) from `version.dll` itself - the host-side launch des
 and 5, and it would put the wide tiers on the same ISA-grade footing the C=32 tier already has. It is
 purely static and purely local. Anchor on the `k_swin_var` mangled-name strings and the
 `hipModuleGetFunction` / launch call sites, then read the stores into the 168-byte argument buffer.
+
+
+---
+
+## 9. The transcode is a pure re-index (open item 8, closed)
+
+Every displacement recovered from the GPU disassembly addresses the buffer the mod builds at first
+run, `dlssnr_on_amd_weights.bin`, not NVIDIA's `WEIGHTS_HT` resource. Section 8 cross-checked those
+displacements against `WEIGHTS_HT` **on the assumption** that the transcode is a straight copy, and
+flagged that the mod had never been run so the assumption was untested.
+
+It has now been run. The cache exists and the assumption holds.
+
+### The cache format
+
+```
+char magic[8]        "DLSSNRW1"
+u32  count           153
+u32  index_size      5,673
+repeat 153x, sorted lexicographically by name:
+  u8   name_len
+  char name[name_len]
+  u64  offset        into the payload region, which begins at index_size
+  u64  size
+then the payloads, packed contiguously in the same lexicographic order
+```
+
+### Size proof, computed without transferring the file
+
+The index size is predictable from the source container's own tensor table:
+
+```
+16 + 153*17 + 3,056 name bytes = 5,673        observed index_size = 0x1629 = 5,673
+5,673 + 147,683,778 payload    = 147,689,451  observed cache size = 147,689,451
+residual 0
+```
+
+The 153 index entries parse with exact consumption, every name and size matches the source table,
+and the offsets form a contiguous lexicographic packing summing to exactly 147,683,778.
+
+### Byte proof
+
+sha256 over the same tensors on both sides — the source blob extracted from `nvngx_dlssnr.dll`, and
+the cache produced by an actual game run on the RX 9070 XT:
+
+| tensor | bytes hashed | result |
+|---|---:|---|
+| `block31.layer0.layer` | 65,536 | identical |
+| `block23.layer1.layer` | 65,536 | identical |
+| `block0.layer0.layer` | 21,696 (**whole tensor**) | identical |
+| `block70.layer0.layer` | 21,808 (**whole tensor**) | identical |
+
+**The transcode adds a header and an index and copies every payload unchanged.** Every offset in
+section 8 that was measured against `WEIGHTS_HT` therefore describes, to the byte, the buffer the
+GPU kernels actually read. The ISA-to-weight-byte agreement reported there is now verified rather
+than assumed.
+
+`dlssnr_cache.py verify` reproduces this on any machine that has run the mod;
+`dlssnr_cache.py predict` does the size half with no cache file at all.

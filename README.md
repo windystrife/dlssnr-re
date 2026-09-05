@@ -82,6 +82,7 @@ python tools/dlssnr_bench.py before.log after.log --compare
 | `dlssnr_isa.py` | WMMA census, LDS access-width breakdown, opcode histogram, loop detection, A/B diff |
 | `dlssnr_segment.py` | Finds sub-tensor boundaries *inside* a blob by sliding the dtype discriminator along it |
 | `dlssnr_model.py` | A generative schema for the whole blob, and the test that falsifies it (153/153, 0 residual) |
+| `dlssnr_cache.py` | Reads the mod's transcoded `DLSSNRW1` cache and proves it byte-identical to the source |
 | `dlssnr_bench.py` | Parses the mod's runtime log; median/p99, rejects confounded windows, Mann-Whitney compare |
 
 ## Two traps these tools exist to avoid
