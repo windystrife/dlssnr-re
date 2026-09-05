@@ -583,3 +583,117 @@ selector is `(flags & 0x38)`: `test r8b,38h; sete cl; xor cl,0Dh; shl r15,cl` pi
    carriers and neither was traced.
 5. **VarParams carries no shape information whatsoever**, so the FP8 slab factorisation and the
    identity of `A1` and `T` are not reachable from the host - that route is the ISA.
+
+---
+
+## 11. The schedule, recovered statically and in full
+
+The last large gap - which stage runs at what width, resolution and window phase - is closed. It is
+not computed at runtime: **all eight stage records and all six shift arrays are compile-time
+constants**. Only H and W depend on the frame size.
+
+### Where the geometry lives
+
+Not in the stage record. A six-entry, 12-byte-stride `{int32 C; int32 H; int32 W}` table sits at
+`ctx+0x190`, built at `0x18001D133..0x18001D1F6`:
+
+```
+[0] = {  32, H>>1, W>>1 }     [3] = { 256, H>>4, W>>4 }
+[1] = {  64, H>>2, W>>2 }     [4] = { 512, H>>5, W>>5 }
+[2] = { 128, H>>3, W>>3 }     [5] = {1024, H>>6, W>>6 }
+```
+
+with `ctx+0x18 = H`, `ctx+0x1C = W`, each `ceil(render_dim / 128) * 128`. Verified directly:
+`mov dword ptr [rsi+0x190],20h` (=32) then `movq [rsi+0x194],xmm1`, and `mov [rsi+0x19C],40h` (=64)
+at a 12-byte stride. The divides are proper signed divisions rounding toward zero
+(`psrad xmm1,1Fh; psrld xmm2,1Eh; paddd; psrad 2`), not raw shifts.
+
+For a 1920x1080 frame that gives:
+
+| tier | C | H | W | windows (H/8 x W/8) |
+|---:|---:|---:|---:|---|
+| 0 | 32 | 576 | 960 | 72 x 120 |
+| 1 | 64 | 288 | 480 | 36 x 60 |
+| 2 | 128 | 144 | 240 | 18 x 30 |
+| 3 | 256 | 72 | 120 | 9 x 15 |
+| 4 | 512 | 36 | 60 | 4 x 7 |
+| 5 | 1024 | 18 | 30 | 2 x 3 |
+
+(1080 pads to 1152; 1920 is already a multiple of 128.)
+
+### The stage records
+
+Two different record types, which is why a single-shape search would have failed:
+
+```c
+/* DECODE: 4-element inline array at rbp+0x560, stride 0x28 */
+struct DecodeStage { int32 firstBlock; int32 lastBlock; int32 shiftIdx0; int32 _pad;
+                     std::vector<int> shifts; };   /* vector at +0x10/+0x18/+0x20 */
+
+/* ENCODE: 4-element inline array at rbp+0x4B0, stride 0x20 */
+struct EncodeStage { int32 firstBlock; int32 lastBlock;
+                     std::vector<int> shifts; };   /* vector at +0x08/+0x10/+0x18 */
+```
+
+Neither carries C, H, W, a tensor pointer or a flags word. `rbp+0x560` is a **reused stack slot** -
+it holds a `std::string` and a `std::vector<char>` earlier in the same function - so it is neither a
+vector header nor a dedicated array, which is what made it ambiguous from a single reference.
+
+The records are built by literal stores. `mov rax,3700000030h` at `0x18001FA02` is
+`{firstBlock=48, lastBlock=55}` - decode stage 0 covers blocks 48..55. Likewise `3D00000038h` =
+(56, 61) and `4500000042h` = (66, 69). Each stage's `shifts` vector is allocated
+`4 * (lastBlock - firstBlock)` bytes, exactly the number of blocks its inner loop runs.
+
+### The schedule
+
+Stage names below are the binary's own log format strings, confirmed present in `.rdata`:
+`pre`, `enc%d`, `dec%d`, `swin%d_C%d`, `swinup%d_C%d`, `vit512a`, `vit512b`, `vit1d`.
+
+| blocks | stage | C | H, W | shift phases |
+|---|---|---:|---|---|
+| 0 | `pre`, hand-rolled `<32,true>`, flags 0x14 | 32 | full-res stem | - |
+| 1-4 | `enc0` | 32 | H/2, W/2 | 0,1,2,3 |
+| 5-8 | `enc1` | 64 | H/4, W/4 | 0,1,2,3 |
+| 9-14 | `enc2` | 128 | H/8, W/8 | 0,1,2,3,0,1 |
+| 15-22 | `enc3` | 256 | H/16, W/16 | 0,1,2,3,0,1,2,3 |
+| 23-30 | `vit512a` | 512 | H/32, W/32 | (i-23) % 4 |
+| 31-38 | bottleneck | 1024 | token-count grid | - |
+| 39 | `vit1d` | 1024 | - | - |
+| 40-47 | `vit512b` | 512 | H/32, W/32 | (i-40) % 4 |
+| 48-55 | `dec0`, 48 = `swinup` | 256 | H/16, W/16 | 0 \| 1,2,3,0,1,2,3 |
+| 56-61 | `dec1`, 56 = `swinup` | 128 | H/8, W/8 | 2 \| 3,0,1,2,3 |
+| 62-65 | `dec2`, 62 = `swinup` | 64 | H/4, W/4 | 0 \| 1,2,3 |
+| 66-69 | `dec3`, 66 = `swinup` | 32 | H/2, W/2 | 0 \| 1,2,3 |
+| 70 | `post`, hand-rolled `<32,true>`, flags 0x20 | 32 | full-res | - |
+
+`a | b,c,...` = the `shiftIdx0` field for the stage's up-block, then the vector for the rest. Shift
+indices are rows of the table at `.rdata 0x180055240`: `(0,0) (-4,-4) (-4,0) (0,-4)`. Consecutive
+blocks within a stage cycle the window phase, which is the defining behaviour of a shifted-window
+transformer.
+
+**This matches the weight-side block ranges exactly** - 0-4 and 66-70 at C=32, 5-8 and 62-65 at
+C=64, 9-14 and 56-61 at C=128, 15-22 and 48-55 at C=256, 23-30 and 40-47 at C=512, 31-38 at C=1024.
+Two independent sources, the weight byte counts and the host scheduler, agree on the tier assignment
+of all 71 blocks.
+
+### Field-to-VarParams mapping
+
+`desc.C` -> dispatcher arg2 -> selects the template instantiation only, never stored in VarParams.
+`desc.H` -> arg7 -> `VarParams+0x18`. `desc.W` -> arg8 -> `VarParams+0x1C`. The record's shift value
+-> arg9 -> a row of the shift table -> `VarParams+0x20/+0x24`.
+
+### Dataflow between stages
+
+Encode stage `s` ping-pongs `ctx[0x2A8+8*(3-s)]` and `ctx[0x1D8+8*s]`. Its first block (flags bit 0)
+reads `ctx[0x1F8+8*(s-1)]`, or `ctx+0x220` - the `pre` output - for `s=0`. Its last block (flags
+bit 2) additionally writes the half-resolution downsample into `auxB = ctx[0x1F8+8*s]`. The stage
+result is normalised into `ctx[0x1D8+8*s]` by a device-to-device copy of `C*H*W` bytes at
+`0x18001EBCA`. That identifies the skip-connection wiring, which section 8 listed as unknown.
+
+### Caveat on this section's provenance
+
+Nine of the fifteen adversarial verifiers for this run did not execute (account spend limit), so the
+schedule table carries less adversarial scrutiny than sections 8-10. What is independently
+re-verified here: the record constants decode to the stated block ranges, the `{C,H,W}` table
+construction and its 12-byte stride, and every stage-name string. The dataflow paragraph is
+single-sourced and should be treated as inferred until re-checked.

@@ -185,6 +185,21 @@ Both of those corrected an earlier claim in this repository. The register-propag
 suggested `<32,true>` reads more tensors was wrong - the two kernels' kernarg load maps are
 byte-identical.
 
+## The schedule
+
+Which stage runs at what width, resolution and window phase is recovered - see `docs/FINDINGS.md`
+section 11. It is not computed at runtime: all eight stage records and all six shift arrays are
+compile-time constants, and only H and W depend on the frame size.
+
+Geometry comes from a six-entry `{C,H,W}` table at `ctx+0x190` with `H_k = H>>(k+1)`,
+`W_k = W>>(k+1)` and `H,W = ceil(render_dim/128)*128`. At 1920x1080 the tiers run at
+576x960, 288x480, 144x240, 72x120, 36x60 and 18x30 for C = 32, 64, 128, 256, 512, 1024.
+
+The stage table matches the weight-side block ranges exactly for all 71 blocks - two independent
+sources agreeing on the tier assignment. The binary names its own stages: the log format strings
+`pre`, `enc%d`, `dec%d`, `swin%d_C%d`, `swinup%d_C%d`, `vit512a`, `vit512b`, `vit1d` are all present
+in `.rdata`.
+
 ## Why there is no reimplementation here
 
 A named blob is not a tensor. Factoring a blob's byte count into
