@@ -83,6 +83,7 @@ python tools/dlssnr_bench.py before.log after.log --compare
 | `dlssnr_segment.py` | Finds sub-tensor boundaries *inside* a blob by sliding the dtype discriminator along it |
 | `dlssnr_model.py` | A generative schema for the whole blob, and the test that falsifies it (153/153, 0 residual) |
 | `dlssnr_cache.py` | Reads the mod's transcoded `DLSSNRW1` cache and proves it byte-identical to the source |
+| `dlssnr_load.py` | **Loads the weights as typed numpy arrays** - decodes FP8 E4M3, splits every block into its named sub-tensors, exports `.npz` |
 | `dlssnr_bench.py` | Parses the mod's runtime log; median/p99, rejects confounded windows, Mann-Whitney compare |
 
 ## Two traps these tools exist to avoid
@@ -125,6 +126,46 @@ bytes   predicted  147,683,778   observed  147,683,778   residual 0
 There is **no convolution** in the outer tiers - no FP8 slab is divisible by 9 and none carries a
 k^2 factor. The `k_conv_*` kernel names are misleading; those tiers run the same block schema as the
 dim-512 transformer, just narrower.
+
+## Loading the weights
+
+`dlssnr_load.py` is the loader a reimplementation would sit on. It decodes FP8 E4M3 through a lookup
+table, splits each block into its named parts, and hands back float32 numpy arrays:
+
+```
+$ python tools/dlssnr_load.py block weights_ht.bin -b 1
+block1  C=32  blob 20,672 B  layout=plain
+  <A0 float8_e4m3 [32x128]>       n=4,096 min=-0.6875 max=+0.7500 std=0.1766
+  <A1 float8_e4m3 [4096] flat>    n=4,096 min=-0.3750 max=+0.4688 std=0.0554
+  <g1 float16 [32] flat>          n=   32 min=-0.3894 max=+0.9917 std=0.3361
+  <Q  float8_e4m3 [32x96]>        n=3,072 min=-0.7500 max=+0.6875 std=0.1763
+  <T  float16 [4096] flat>        n=4,096 min=-6.7773 max=+0.0000 std=1.6678
+  ...
+```
+
+44 blocks decode with **zero layout mismatches** and zero NaN across 12.5M decoded values. The
+down/up variants are chosen by exact byte count rather than assumed: down blocks keep the trailing
+pad at C=32 and absorb it at C>=64, up blocks do the reverse and carry a second gain vector `g1b`
+that plain blocks lack.
+
+Shapes are given only where established. Where a byte count admits several factorisations the array
+comes back **flat**, not guessed.
+
+### The loader confirms the ISA independently
+
+`A0` at C=32 is reshaped `(32,128)` because the GPU code divides the index by 128 (`idx >> 7`).
+If that row length is real, row statistics should be homogeneous. They are - and sharply so:
+
+| row length | row L2 mean | relative spread |
+|---:|---:|---:|
+| 96 | 1.7296 | 0.0371 |
+| 112 | 1.8683 | 0.0363 |
+| **128** | **1.9984** | **0.0043** |
+| 160 | 2.2337 | 0.0299 |
+
+Across six independent blocks at length 128 the row norm is 1.9952-2.0001 with spread 0.0043-0.0059.
+The rows are L2-normalised to exactly 2. A wrong row length inflates the spread about eightfold.
+(256 is also tight, at norm 2.828 = 2*sqrt(2) - it is a multiple of the true period, not a rival.)
 
 ## Why there is no reimplementation here
 
