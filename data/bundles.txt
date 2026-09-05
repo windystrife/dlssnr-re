@@ -1,0 +1,32 @@
+Group-averaged bundle segmentation.
+Window adapts to copy count: more copies -> finer boundary resolution.
+
+  blob size    n   window     SE  segments (bytes)
+  4,196,352    8     1024   1.33  f8:4,193,910 | f16:2,442
+  4,194,320    8     1024   1.33  f8:4,194,320
+  3,145,856    8     1024   1.33  f8:3,145,856
+  1,050,624    8     1024   1.33  f8:1,048,200 | f16:2,424
+    917,568   16      512   1.33  f8:786,238 | f16:131,330
+    820,784    1     8192   1.33  f8:494,812 | f8:190,178 | f16:72,274 | f8:62,830   (few copies -> window too coarse to place a boundary)
+    820,288    1     8192   1.33  f8:554,556 | f16:71,096 | f8:59,250 | f16:7,972 | f8:127,400   (few copies -> window too coarse to place a boundary)
+    689,232   14     1024   1.00  f8:360,046 | f16:1,348 | f8:195,838 | f16:66,302 | f8:64,754 | f16:944   (conv bundle; boundaries not yet on round values)
+    525,312    1     8192   1.33  f8:521,128 | f16:4,184   (few copies -> window too coarse to place a boundary)
+    524,304    1     8192   1.33  f8:524,304   (few copies -> window too coarse to place a boundary)
+    524,288   16      512   1.33  f8:287,026 | f8:237,214
+    263,168   32      256   1.33  f8:262,026 | f16:1,142
+    230,176    1     8192   1.33  f8:177,558 | f16:38,302 | f8:14,220   (few copies -> window too coarse to place a boundary)
+    229,936    1     8192   1.33  f8:144,318 | f16:38,924 | f8:46,684   (few copies -> window too coarse to place a boundary)
+    197,184   10     1024   1.19  f8:97,898 | f16:1,158 | f8:48,308 | f16:33,578 | f8:15,528 | f16:714   (conv bundle; boundaries not yet on round values)
+     70,048    1     8192   1.33  f8:46,060 | f16:23,988   (few copies -> window too coarse to place a boundary)
+     69,936    1     8192   1.33  f8:38,204 | f16:22,084 | f8:9,648   (few copies -> window too coarse to place a boundary)
+     61,760    6     2048   1.08  f8:40,290 | f16:18,016 | f8:3,454
+     22,784    1     8192   1.33  f8:10,232 | f16:12,552   (few copies -> window too coarse to place a boundary)
+     22,720    1     8192   1.33  f8:8,336 | f16:14,384   (few copies -> window too coarse to place a boundary)
+     21,808    1     8192   1.33  f8:8,142 | f16:13,666   (few copies -> window too coarse to place a boundary)
+     21,696    1     8192   1.33  f8:9,410 | f16:12,286   (few copies -> window too coarse to place a boundary)
+     20,672    6     2048   1.08  f8:10,606 | f16:10,066
+
+Reading the result: a segment's BYTE COUNT is what the data determines. Splitting
+it into a x b is not - 1024x4096 and 512x8192 have the same byte count. Use the
+tier dimension (512 for the dim-512 transformer blocks, 1024 for the bottleneck)
+to fix the factorisation, then the byte count confirms it.

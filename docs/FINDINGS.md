@@ -263,3 +263,52 @@ instruction budget unpacking FP8 tiles one or two bytes at a time.
 - **What `Scale` (default 0.03125) multiplies.** It is stored to `.data 0x74508` and no instruction
   in the 4.55 MB binary reads that address. Static analysis cannot prove it reaches the GPU.
 - **Semantics of most INI keys and all six `DLSSNR_*` env vars.** Undocumented upstream.
+
+
+---
+
+## 7. Sub-tensor recovery: 80 of 153 blobs resolved
+
+A named blob is a *bundle*, not a tensor — the container stores only the bundle's total length.
+`dlssnr_segment.py bundle` recovers the internal partition where it can, by exploiting the fact that
+blobs of the same byte size are the same layer type repeated across blocks: averaging the **signed**
+parity difference across all copies makes noise fall as sqrt(n) while the FP16 signal stays, which
+buys a much smaller window — and the window is the boundary resolution.
+
+| blob size | copies | window | recovered layout | reading |
+|---:|---:|---:|---|---|
+| 4,196,352 | 8 | 1 KiB | FP8 4,194,304 + FP16 2,048 | **1024x4096 + 1024 biases** |
+| 4,194,320 | 8 | 1 KiB | FP8 uniform (+16 B) | **1024x4096** |
+| 3,145,856 | 8 | 1 KiB | FP8 uniform (+128 B) | **1024x3072** |
+| 1,050,624 | 8 | 1 KiB | FP8 1,048,576 + FP16 2,048 | **1024x1024 + 1024 biases** |
+| 917,568 | 16 | 512 B | FP8 786,432 + FP16 131,136 | **512x1536 fused QKV** + an FP16 bundle |
+| 524,288 | 16 | 512 B | FP8 uniform | **512x1024** |
+| 263,168 | 32 | 256 B | FP8 262,144 + FP16 1,024 | **512x512 + 512 biases** |
+
+Every boundary above lands inside its detection window. 512x512 + 512 FP16 biases accounts for
+263,168 exactly; 1024x4096 + 1024 FP16 biases accounts for 4,196,352 exactly.
+
+**The byte count is what the data determines; the a x b split is not.** 1024x4096 and 512x8192 have
+the same byte count. The factorisation above comes from the tier dimension (512 for blocks 23–30 and
+40–47, 1024 for the bottleneck 31–38), which the byte counts then confirm.
+
+### What did not resolve, and why
+
+- **The conv bundles.** `689,232` (14 copies) and `197,184` (10 copies) resolve into a consistent
+  **six-segment** alternating FP8/FP16 layout, but no boundary lands on a round value. These are
+  deeper bundles than the transformer blocks — likely conv weights plus per-channel norm parameters.
+- **Single-copy blobs** (the transition blocks at 525,312 / 524,304 / 230,176 / 229,936 / 70,048 /
+  69,936 / 22,784 / 22,720 / 21,808 / 21,696 / 820,784 / 820,288). With one copy there is nothing to
+  average, so the window is forced to 8 KiB — far too coarse to place a boundary.
+- **Same-dtype neighbours are invisible.** The method finds dtype changes, not tensor changes, so
+  every segment count is a lower bound. The 131,136 B FP16 region inside `917,568` is almost
+  certainly several tensors, not one.
+
+### Where that leaves a reimplementation
+
+The transformer stage and the bottleneck are now dimensioned. The conv shell is not, and the graph
+that connects them — skip wiring, normalisation placement, window-shift schedule — is not in the
+weights at all. Recovering those means reading the kernel argument structs (sizes already known:
+`VarParams` 168 B, `ReprojParams` 128 B, `PreParams`/`PostParams` 80 B, `ConvPlParams` 72 B,
+`Conv2Params`/`ExportParams` 64 B, down to 24 B) against the disassembly. That is days of work, not
+an afternoon — and it still needs an oracle to verify against.

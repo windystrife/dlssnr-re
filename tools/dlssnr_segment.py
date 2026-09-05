@@ -29,7 +29,8 @@ an upper one.
 
 Usage
 -----
-  python dlssnr_segment.py map     weights_ht.bin              # all blobs, segment counts
+  python dlssnr_segment.py bundle  weights_ht.bin              # group-averaged, the good one
+  python dlssnr_segment.py map     weights_ht.bin              # single-blob coarse map
   python dlssnr_segment.py show    weights_ht.bin -n block23.layer2.layer
   python dlssnr_segment.py refine  weights_ht.bin -n block23.layer2.layer
 """
@@ -91,10 +92,79 @@ def nice(n):
     return out
 
 
+# ---------------------------------------------------------------- bundle
+# Blobs of the same byte size are the same layer type repeated across blocks,
+# so their internal layout is identical. Averaging the SIGNED parity difference
+# across all copies makes the noise fall as sqrt(n) while the FP16 signal stays,
+# which buys a much smaller window -- and the window is the boundary resolution.
+#
+# Statistic: mean(even byte) - mean(odd byte) over a sliding window.
+#   FP8   : both parities are the same distribution  -> 0
+#   FP16LE: low byte near-uniform, high byte small    -> ~100
+# Taking |.| BEFORE averaging would keep the noise floor; take it after.
+
+def run_mean(x, w):
+    import numpy as np
+    c = np.concatenate(([0.0], np.cumsum(x)))
+    return (c[w:] - c[:-w]) / w
+
+
+def bundle_profile(arr, members, win_hw):
+    """Group-averaged signed parity difference. win_hw is in halfwords."""
+    import numpy as np
+    acc = None
+    for e in members:
+        b = arr[e["data"]:e["data"] + e["size"]]
+        n = (len(b) // 2) * 2
+        v = run_mean(b[0:n:2], win_hw) - run_mean(b[1:n:2], win_hw)
+        acc = v if acc is None else acc + v
+    return np.abs(acc / len(members))
+
+
+def cmd_bundle(blob, ents):
+    import math
+    import numpy as np
+    arr = np.frombuffer(blob, dtype=np.uint8).astype(np.float64)
+    groups = collections.defaultdict(list)
+    for e in ents:
+        groups[e["size"]].append(e)
+    print("Group-averaged bundle segmentation.")
+    print("Window adapts to copy count: more copies -> finer boundary resolution.\n")
+    print(f"{'blob size':>11} {'n':>4} {'window':>8} {'SE':>6}  segments (bytes)")
+    for sz, mem in sorted(groups.items(), key=lambda x: -x[0]):
+        if sz < 4096:
+            continue
+        n = len(mem)
+        win_hw = max(64, int(2 ** math.ceil(math.log2(4096 / max(1, n)))))
+        p = bundle_profile(arr, mem, win_hw)
+        se = 60.0 * math.sqrt(2.0 / (win_hw * n))
+        thr = max(8.0, 6 * se)
+        k = (p > thr).astype(int)
+        segs, cur, st = [], k[0], 0
+        for i, v in enumerate(k[1:], 1):
+            if v != cur:
+                segs.append(("f16" if cur else "f8", st * 2, (i + win_hw // 2) * 2))
+                cur, st = v, i + win_hw // 2
+        segs.append(("f16" if cur else "f8", st * 2, sz))
+        segs = [x for x in segs if x[2] - x[1] >= win_hw]
+        lay = " | ".join(f"{kk}:{b - a:,}" for kk, a, b in segs)
+        note = ""
+        if n < 6:
+            note = "   (few copies -> window too coarse to place a boundary)"
+        elif len(segs) > 3:
+            note = "   (conv bundle; boundaries not yet on round values)"
+        print(f"{sz:>11,} {n:>4} {win_hw * 2:>8} {se:>6.2f}  {lay[:88]}{note}")
+    print("""
+Reading the result: a segment's BYTE COUNT is what the data determines. Splitting
+it into a x b is not - 1024x4096 and 512x8192 have the same byte count. Use the
+tier dimension (512 for the dim-512 transformer blocks, 1024 for the bottleneck)
+to fix the factorisation, then the byte count confirms it.""")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["map", "show", "refine"])
+    ap.add_argument("cmd", choices=["map", "show", "refine", "bundle"])
     ap.add_argument("blob")
     ap.add_argument("-n", "--name", help="blob name for show/refine")
     ap.add_argument("-w", "--window", type=int, default=4096)
@@ -105,7 +175,10 @@ def main():
     ents, _ = walk(blob)
     by = {e["name"]: e for e in ents}
 
-    if a.cmd == "map":
+    if a.cmd == "bundle":
+        cmd_bundle(blob, ents)
+
+    elif a.cmd == "map":
         multi = 0
         print(f"{'blob':30}{'bytes':>12}{'segments':>10}  layout")
         for e in sorted(ents, key=lambda x: -x["size"]):
