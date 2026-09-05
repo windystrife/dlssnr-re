@@ -467,3 +467,119 @@ than assumed.
 
 `dlssnr_cache.py verify` reproduces this on any machine that has run the mod;
 `dlssnr_cache.py predict` does the size half with no cache file at all.
+
+---
+
+## 10. VarParams recovered, and two of my own claims refuted
+
+The 168-byte launch descriptor the host hands `k_swin_var` is now recovered. Getting there required
+overturning two things asserted earlier in this document.
+
+### Refutation 1: the kernel key table was wrong
+
+The 33 `__hipRegisterFunction` calls were read as a `+8` stride throughout. Parsing the actual
+`(rdx, r8)` pairs gives **34** registrations, and the stride breaks twice:
+
+```
+0x180055170 .. 0x180055238   26 kernels, +8 stride        (correct)
+0x180055240 .. 0x18005525F   NOT keys - a 32-byte data table
+0x180055260  k_flag_wait     0x180055268  k_flag_set
+0x180055270  0                                            (an MSVC allocator singleton)
+0x180057A18 .. 0x180057A38   the five k_swin_var instantiations, in a different .rdata region
+0x1800740F0  g_e4m3_lut      registered via __hipRegisterVar, 0x200 bytes
+```
+
+So `0x180055260` is **`k_flag_wait`**, not `k_swin_var<64,false>`. The launch site decoded there was
+a `k_flag_wait` launch, and its "168-byte coincidence" was exactly that. The three `args[]` entries
+seen at it are `k_flag_wait(unsigned*, unsigned, unsigned)` - three parameters, matching exactly.
+Likewise the three `<256>` "launch sites" were `std::_Fake_allocator` references inside inlined
+`std::vector::_Emplace_reallocate`, not launches.
+
+Every live `k_swin_var` launch is in one of two functions: the width dispatcher at `0x1800222F0`
+(all five instantiations inlined, launching at `0x180022583 / 6D6 / 829 / 97C / ACF`) and
+`0x18001DDF0` (two hand-rolled `<32,true>` sites). The five generated `__device_stub__` thunks have
+zero callers.
+
+### `sizeof(VarParams) == 168`, proven three ways
+
+1. AMDGPU msgpack: all five kernels declare `.args[0] = {offset 0, size 168, by_value}`, with
+   `hidden_block_count_x` at offset 168 - so kernarg offset equals struct offset.
+2. Host: the dispatcher builds five copies at `rsp+0x100 / 0x1A8 / 0x250 / 0x2F8 / 0x3A0` - stride
+   exactly `0xA8`, and the top lands on `0x448`, which is the whole `sub rsp,448h` frame.
+3. Device: the kernels load kernarg `0xA8` and `0xB4`, the COV5 hidden args, which begin at
+   `align8(sizeof(explicit))`.
+
+### The struct
+
+```c
+struct VarParams {                 /* 168 bytes */
+  const void*  src;        /* 0x00  read; layout [C/16][H][W][16 B] fp8   */
+  void*        dst;        /* 0x08  write only; gated by flags bit 1      */
+  const void*  weights;    /* 0x10  one base; sub-tensors by immediate add*/
+  int32_t      H;          /* 0x18  gridDim.y extent                      */
+  int32_t      W;          /* 0x1C  gridDim.x extent and row stride       */
+  int32_t      shiftX;     /* 0x20  0 or -4                               */
+  int32_t      shiftY;     /* 0x24  0 or -4                               */
+  uint32_t     flags;      /* 0x28  6 live bits                           */
+  uint32_t     _pad0;      /* 0x2C                                        */
+  const void*  auxA;       /* 0x30  read                                  */
+  void*        auxB;       /* 0x38  read and write                        */
+  /* 0x40..0x9F  written only by the two hand-rolled C=32 sites;
+                 the C=64/128/256 kernels never touch it and the
+                 dispatcher zeroes it                                     */
+  void*        workspace;  /* 0xA0  hipMalloc'd scratch                   */
+};
+```
+
+Every byte lands in a named slot; **81% have offset, width and kind proven**. For the wide tiers only
+`0x00..0x3F` and `0xA0..0xA7` are live - 72 bytes - and those are fully accounted for.
+
+### The window-shift schedule
+
+The 32-byte gap in the key stride is the shift table. Read directly from `.rdata 0x180055240`:
+
+```
+(0, 0)   (-4, -4)   (-4, 0)   (0, -4)
+```
+
+Four `{int32,int32}` phases, every value in {0, -4}: a **four-phase 2x2 shifted-window schedule with
+shift 4**. It is referenced three times, all from inside the dispatcher. This is why no `-4`
+immediate appears in the dispatcher code - the schedule is table-driven. Closes the "shift schedule"
+open item.
+
+### Refutation 2: the bool template parameter
+
+Section 8 speculated, from a pointer count, that `<32,true>` reads three more tensors than
+`<32,false>`. That was an artifact of incomplete register propagation; the two kernels' kernarg load
+maps are byte-identical.
+
+What the bool actually selects: **stage the second window tile in the global workspace instead of in
+LDS, and double the per-workgroup workspace stride from 4 KiB to 8 KiB.**
+
+The substitution is exact and checkable in the disassembly:
+
+| | `<32,false>` | `<32,true>` |
+|---|---|---|
+| `ds_*` at offsets 15616, 15680, … 16064 (stride 64) | **8** | **0** |
+| `global_store_b16` at 4096, 4160, … 4544 (stride 64) | **0** | **8** |
+| `s_lshl_b64 s[2:3], s[2:3], N` | **12** (4 KiB) | **13** (8 KiB) |
+| `.group_segment_fixed_size` | 15,632 | 15,616 |
+
+The same eight slots at the same 64-byte stride, relocated to `workspace + 0x1000`. The arithmetic
+closes: 256 lanes x 8 half-words x 2 B = 4,096 B, exactly the extra workspace. On the host the
+selector is `(flags & 0x38)`: `test r8b,38h; sete cl; xor cl,0Dh; shl r15,cl` picks shift 12 or 13.
+
+### What is still missing
+
+1. **The per-stage schedule `{C, H, W, shiftIdx}`** - the biggest remaining gap. It lives in runtime
+   arrays the dispatcher's three callers index (12-byte-stride `{C,H,W}` descriptors), populated one
+   or two levels further up an untraced chain. Without it there are no resolutions and no shift
+   sequence.
+2. **Tensor identity of six pointer fields** - `0x30`, `0x38`, `0x40`, `0x48`, `0x80`, `0x98`.
+   Directions are proven for two; nothing names them.
+3. **Flags bits 0/1/2** - three callers encode "first"/"last" three different ways, so no consistent
+   naming is established.
+4. **`Scale = 0.03125` is still unproven to reach the GPU.** `0x50` and `0x88` are the only candidate
+   carriers and neither was traced.
+5. **VarParams carries no shape information whatsoever**, so the FP8 slab factorisation and the
+   identity of `A1` and `T` are not reachable from the host - that route is the ISA.

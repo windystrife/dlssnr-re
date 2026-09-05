@@ -167,6 +167,24 @@ Across six independent blocks at length 128 the row norm is 1.9952-2.0001 with s
 The rows are L2-normalised to exactly 2. A wrong row length inflates the spread about eightfold.
 (256 is also tight, at norm 2.828 = 2*sqrt(2) - it is a multiple of the true period, not a rival.)
 
+## The launch descriptor
+
+`VarParams` (168 bytes), the struct the host hands `k_swin_var`, is recovered - see
+`docs/FINDINGS.md` section 10. It carries `src`, `dst`, `weights`, `H`, `W`, `shiftX`, `shiftY`,
+`flags`, two aux pointers and a workspace pointer. Every byte lands in a named slot and 81% have
+kind proven.
+
+Two findings from it are worth calling out. The **window-shift schedule** is a table at
+`.rdata 0x180055240`: `(0,0) (-4,-4) (-4,0) (0,-4)` - four phases, shift 4. And the `bool` template
+parameter on `k_swin_var` selects **staging the second window tile in global workspace rather than
+LDS**, doubling the workspace stride from 4 KiB to 8 KiB: eight `ds_*` ops at offsets 15616..16064
+in `<false>` become eight `global_store_b16` at 4096..4544 in `<true>`, same 64-byte stride, and the
+one differing constant is `s_lshl_b64 ...,12` versus `...,13`.
+
+Both of those corrected an earlier claim in this repository. The register-propagation heuristic that
+suggested `<32,true>` reads more tensors was wrong - the two kernels' kernarg load maps are
+byte-identical.
+
 ## Why there is no reimplementation here
 
 A named blob is not a tensor. Factoring a blob's byte count into
