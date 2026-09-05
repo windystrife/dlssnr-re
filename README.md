@@ -80,6 +80,7 @@ python tools/dlssnr_bench.py before.log after.log --compare
 | `dlssnr_weights.py` | Walks the weight container; proves the layout numerically; classifies dtype per tensor; prints the topology; exports to `.npy` |
 | `disasm_comgr.ps1` | Disassembles AMDGPU code objects via `amd_comgr` P/Invoke — no toolchain install |
 | `dlssnr_isa.py` | WMMA census, LDS access-width breakdown, opcode histogram, loop detection, A/B diff |
+| `dlssnr_segment.py` | Finds sub-tensor boundaries *inside* a blob by sliding the dtype discriminator along it |
 | `dlssnr_bench.py` | Parses the mod's runtime log; median/p99, rejects confounded windows, Mann-Whitney compare |
 
 ## Two traps these tools exist to avoid
@@ -106,6 +107,23 @@ collapses. On the shipped blob it holds **153/153** while the walk consumes **14
 
 (The field is a length in halfwords, not a shape. It carries no dimension information — the layer
 dimensions in `docs/FINDINGS.md` come from factoring the exact byte counts instead.)
+
+## Why there is no reimplementation here
+
+A named blob is not a tensor. Factoring a blob's byte count into
+`Cout x Cin x k x k (+ bias)` fails for **16 of the 24** distinct sizes, and the fits it does find are
+meaningless divisors (`48 x 14359`). Sliding the dtype discriminator along a blob explains why:
+**62 blobs change dtype partway through**, so each named blob is a *bundle* of sub-tensors whose
+internal boundaries the container never stores. They live in code that was never published.
+
+`dlssnr_segment.py` recovers some of them anyway. On `block23.layer2.layer` (917,568 B) the boundary
+lands at **786,432 = 512 x 1536** — the fused QKV projection of a dim-512 transformer block —
+followed by 131,136 B of FP16. That is a real structural read, and it is the method that would have
+to be pushed much further before any forward pass could be written. Two adjacent sub-tensors of the
+same dtype stay invisible to it, so its segment counts are lower bounds.
+
+That is the honest state: the container, the dtypes, the topology, the kernels and the ISA are
+recovered; the intra-blob partition, the skip wiring and the normalisation placement are not.
 
 ## A caveat that travels with every number here
 

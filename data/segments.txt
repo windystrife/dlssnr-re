@@ -1,0 +1,148 @@
+blob                                 bytes  segments  layout
+block31.layer1.layer             4,196,352         1  f8:4098K
+block32.layer1.layer             4,196,352         1  f8:4098K
+block33.layer1.layer             4,196,352         1  f8:4098K
+block34.layer1.layer             4,196,352         1  f8:4098K
+block35.layer1.layer             4,196,352         1  f8:4098K
+block36.layer1.layer             4,196,352         1  f8:4098K
+block37.layer1.layer             4,196,352         1  f8:4098K
+block38.layer1.layer             4,196,352         1  f8:4098K
+block31.layer0.layer             4,194,320         1  f8:4096K
+block32.layer0.layer             4,194,320         1  f8:4096K
+block33.layer0.layer             4,194,320         1  f8:4096K
+block34.layer0.layer             4,194,320         1  f8:4096K
+block35.layer0.layer             4,194,320         1  f8:4096K
+block36.layer0.layer             4,194,320         1  f8:4096K
+block37.layer0.layer             4,194,320         1  f8:4096K
+block38.layer0.layer             4,194,320         1  f8:4096K
+block31.layer2.layer             3,145,856         1  f8:3072K
+block32.layer2.layer             3,145,856         1  f8:3072K
+block33.layer2.layer             3,145,856         1  f8:3072K
+block34.layer2.layer             3,145,856         1  f8:3072K
+block35.layer2.layer             3,145,856         1  f8:3072K
+block36.layer2.layer             3,145,856         1  f8:3072K
+block37.layer2.layer             3,145,856         1  f8:3072K
+block38.layer2.layer             3,145,856         1  f8:3072K
+block31.layer4.layer             1,050,624         1  f8:1026K
+block32.layer4.layer             1,050,624         1  f8:1026K
+block33.layer4.layer             1,050,624         1  f8:1026K
+block34.layer4.layer             1,050,624         1  f8:1026K
+block35.layer4.layer             1,050,624         1  f8:1026K
+block36.layer4.layer             1,050,624         1  f8:1026K
+block37.layer4.layer             1,050,624         1  f8:1026K
+block38.layer4.layer             1,050,624         1  f8:1026K
+block23.layer2.layer               917,568         2  f8:768K f16:128K
+block24.layer2.layer               917,568         2  f8:768K f16:128K
+block25.layer2.layer               917,568         2  f8:768K f16:128K
+block26.layer2.layer               917,568         2  f8:768K f16:128K
+block27.layer2.layer               917,568         2  f8:768K f16:128K
+block28.layer2.layer               917,568         2  f8:768K f16:128K
+block29.layer2.layer               917,568         2  f8:768K f16:128K
+block30.layer2.layer               917,568         2  f8:768K f16:128K
+block40.layer2.layer               917,568         2  f8:768K f16:128K
+block41.layer2.layer               917,568         2  f8:768K f16:128K
+block42.layer2.layer               917,568         2  f8:768K f16:128K
+block43.layer2.layer               917,568         2  f8:768K f16:128K
+block44.layer2.layer               917,568         2  f8:768K f16:128K
+block45.layer2.layer               917,568         2  f8:768K f16:128K
+block46.layer2.layer               917,568         2  f8:768K f16:128K
+block47.layer2.layer               917,568         2  f8:768K f16:128K
+block48.layer0.layer               820,784         5  f8:480K f16:4K f8:188K f16:68K f8:61K
+block22.layer0.layer               820,288         7  f8:352K f16:4K f8:188K f16:68K f8:60K f16:4K
+block15.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block16.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block17.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block18.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block19.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block20.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block21.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block49.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block50.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block51.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block52.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block53.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block54.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block55.layer0.layer               689,232         5  f8:352K f16:4K f8:188K f16:68K f8:61K
+block39.layer0.layer               525,312         1  f8:513K
+block30.layer4.layer               524,304         1  f8:512K
+block23.layer0.layer               524,288         1  f8:512K
+block24.layer0.layer               524,288         1  f8:512K
+block25.layer0.layer               524,288         1  f8:512K
+block26.layer0.layer               524,288         1  f8:512K
+block27.layer0.layer               524,288         1  f8:512K
+block28.layer0.layer               524,288         1  f8:512K
+block29.layer0.layer               524,288         1  f8:512K
+block30.layer0.layer               524,288         1  f8:512K
+block40.layer0.layer               524,288         1  f8:512K
+block41.layer0.layer               524,288         1  f8:512K
+block42.layer0.layer               524,288         1  f8:512K
+block43.layer0.layer               524,288         1  f8:512K
+block44.layer0.layer               524,288         1  f8:512K
+block45.layer0.layer               524,288         1  f8:512K
+block46.layer0.layer               524,288         1  f8:512K
+block47.layer0.layer               524,288         1  f8:512K
+block23.layer1.layer               263,168         1  f8:257K
+block23.layer3.layer               263,168         1  f8:257K
+block24.layer1.layer               263,168         1  f8:257K
+block24.layer3.layer               263,168         1  f8:257K
+block25.layer1.layer               263,168         1  f8:257K
+block25.layer3.layer               263,168         1  f8:257K
+block26.layer1.layer               263,168         1  f8:257K
+block26.layer3.layer               263,168         1  f8:257K
+block27.layer1.layer               263,168         1  f8:257K
+block27.layer3.layer               263,168         1  f8:257K
+block28.layer1.layer               263,168         1  f8:257K
+block28.layer3.layer               263,168         1  f8:257K
+block29.layer1.layer               263,168         1  f8:257K
+block29.layer3.layer               263,168         1  f8:257K
+block30.layer1.layer               263,168         1  f8:257K
+block30.layer3.layer               263,168         1  f8:257K
+block40.layer1.layer               263,168         1  f8:257K
+block40.layer3.layer               263,168         1  f8:257K
+block41.layer1.layer               263,168         1  f8:257K
+block41.layer3.layer               263,168         1  f8:257K
+block42.layer1.layer               263,168         1  f8:257K
+block42.layer3.layer               263,168         1  f8:257K
+block43.layer1.layer               263,168         1  f8:257K
+block43.layer3.layer               263,168         1  f8:257K
+block44.layer1.layer               263,168         1  f8:257K
+block44.layer3.layer               263,168         1  f8:257K
+block45.layer1.layer               263,168         1  f8:257K
+block45.layer3.layer               263,168         1  f8:257K
+block46.layer1.layer               263,168         1  f8:257K
+block46.layer3.layer               263,168         1  f8:257K
+block47.layer1.layer               263,168         1  f8:257K
+block47.layer3.layer               263,168         1  f8:257K
+block56.layer0.layer               230,176         3  f8:176K f16:36K f8:12K
+block14.layer0.layer               229,936         3  f8:144K f16:32K f8:48K
+block10.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block11.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block12.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block13.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block57.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block58.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block59.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block60.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block61.layer0.layer               197,184         3  f8:144K f16:32K f8:16K
+block9.layer0.layer                197,184         3  f8:144K f16:32K f8:16K
+block62.layer0.layer                70,048         3  f8:48K f16:16K f8:4K
+block8.layer0.layer                 69,936         3  f8:40K f16:16K f8:12K
+block5.layer0.layer                 61,760         3  f8:40K f16:16K f8:4K
+block6.layer0.layer                 61,760         3  f8:40K f16:16K f8:4K
+block63.layer0.layer                61,760         3  f8:40K f16:16K f8:4K
+block64.layer0.layer                61,760         3  f8:40K f16:16K f8:4K
+block65.layer0.layer                61,760         3  f8:40K f16:16K f8:4K
+block7.layer0.layer                 61,760         3  f8:40K f16:16K f8:4K
+block66.layer0.layer                22,784         2  f8:12K f16:10K
+block4.layer0.layer                 22,720         2  f8:8K f16:14K
+block70.layer0.layer                21,808         2  f8:8K f16:13K
+block0.layer0.layer                 21,696         2  f8:8K f16:13K
+block1.layer0.layer                 20,672         2  f8:8K f16:12K
+block2.layer0.layer                 20,672         2  f8:8K f16:12K
+block3.layer0.layer                 20,672         2  f8:8K f16:12K
+block67.layer0.layer                20,672         2  f8:8K f16:12K
+block68.layer0.layer                20,672         2  f8:8K f16:12K
+block69.layer0.layer                20,672         2  f8:8K f16:12K
+
+62 blobs are internally multi-segment -> a named blob is a BUNDLE, not a tensor.
+Same-dtype neighbours are invisible here, so these counts are LOWER BOUNDS.
