@@ -81,6 +81,7 @@ python tools/dlssnr_bench.py before.log after.log --compare
 | `disasm_comgr.ps1` | Disassembles AMDGPU code objects via `amd_comgr` P/Invoke — no toolchain install |
 | `dlssnr_isa.py` | WMMA census, LDS access-width breakdown, opcode histogram, loop detection, A/B diff |
 | `dlssnr_segment.py` | Finds sub-tensor boundaries *inside* a blob by sliding the dtype discriminator along it |
+| `dlssnr_model.py` | A generative schema for the whole blob, and the test that falsifies it (153/153, 0 residual) |
 | `dlssnr_bench.py` | Parses the mod's runtime log; median/p99, rejects confounded windows, Mann-Whitney compare |
 
 ## Two traps these tools exist to avoid
@@ -107,6 +108,22 @@ collapses. On the shipped blob it holds **153/153** while the walk consumes **14
 
 (The field is a length in halfwords, not a shape. It carries no dimension information — the layer
 dimensions in `docs/FINDINGS.md` come from factoring the exact byte counts instead.)
+
+## The whole blob is one block schema at six widths
+
+Every one of the 153 blobs is the same block instantiated at a width `C` in
+{32, 64, 128, 256, 512, 1024}, closed form `R(C) = 9C^2 + 388C + 48 + max(16, C/8)` (and `8C^2` at
+C=32, where one slab is absent). `dlssnr_model.py check` rebuilds every blob size from the schema and
+compares against the file:
+
+```
+blobs   predicted  153   observed  153
+bytes   predicted  147,683,778   observed  147,683,778   residual 0
+```
+
+There is **no convolution** in the outer tiers - no FP8 slab is divisible by 9 and none carries a
+k^2 factor. The `k_conv_*` kernel names are misleading; those tiers run the same block schema as the
+dim-512 transformer, just narrower.
 
 ## Why there is no reimplementation here
 

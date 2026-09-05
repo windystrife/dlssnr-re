@@ -1,0 +1,38 @@
+closed form vs the block schema, per width:
+  C=32    plain    20,672  closed form    20,672  ok
+  C=64    plain    61,760  closed form    61,760  ok
+  C=128   plain   197,184  closed form   197,184  ok
+  C=256   plain   689,232  closed form   689,232  ok
+
+predicted vs observed, by blob size:
+    4,196,352  predicted x8   observed x8  
+    4,194,320  predicted x8   observed x8  
+    3,145,856  predicted x8   observed x8  
+    1,050,624  predicted x8   observed x8  
+      917,568  predicted x16  observed x16 
+      820,784  predicted x1   observed x1  
+      820,288  predicted x1   observed x1  
+      689,232  predicted x14  observed x14 
+      525,312  predicted x1   observed x1  
+      524,304  predicted x1   observed x1  
+      524,288  predicted x16  observed x16 
+      263,168  predicted x32  observed x32 
+      230,176  predicted x1   observed x1  
+      229,936  predicted x1   observed x1  
+      197,184  predicted x10  observed x10 
+       70,048  predicted x1   observed x1  
+       69,936  predicted x1   observed x1  
+       61,760  predicted x6   observed x6  
+       22,784  predicted x1   observed x1  
+       22,720  predicted x1   observed x1  
+       21,808  predicted x1   observed x1  
+       21,696  predicted x1   observed x1  
+       20,672  predicted x6   observed x6  
+            2  predicted x9   observed x9  
+
+blobs   predicted  153   observed  153
+bytes   predicted  147,683,778   observed  147,683,778   residual 0
+walk consumed 147,695,410 / 147,695,410
+
+PASS - the schema reproduces every blob size and every byte.
+It is a size model, not a forward pass: slab factorisation is still open.

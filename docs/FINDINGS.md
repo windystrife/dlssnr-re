@@ -312,3 +312,99 @@ weights at all. Recovering those means reading the kernel argument structs (size
 `VarParams` 168 B, `ReprojParams` 128 B, `PreParams`/`PostParams` 80 B, `ConvPlParams` 72 B,
 `Conv2Params`/`ExportParams` 64 B, down to 24 B) against the disassembly. That is days of work, not
 an afternoon — and it still needs an oracle to verify against.
+
+
+---
+
+## 8. The whole blob is one block schema at six widths
+
+Section 7 stopped at 80/153. Four further routes - kernel-arg structs, sharper segmentation,
+architectural constraint, and mining immediates out of the ISA - closed the rest.
+
+### The schema
+
+Every blob is the same block instantiated at one of six widths `C` in {32, 64, 128, 256, 512, 1024}:
+
+| part | bytes | dtype | notes |
+|---|---|---|---|
+| `A0` | 4C2 | FP8 | row length **128** at C=32, ISA-proven from `idx >> 7` |
+| `A1` | 128C | FP8 | absent at C >= 512; role unknown |
+| `A2` | C2 | FP8 | **absent at C=32** |
+| `g1` | 2C | FP16 | gain vector, in a 16-byte-padded slot |
+| `Q` | 3C2 | FP8 | row length **3C** at C=32, ISA-proven from the magic divide `0xaaab >> 22` = /96 |
+| `T` | 256C | FP16 | all values <= 0, max exactly 0.0; role unknown; 26-40% of a narrow block |
+| `S` | 4*(C/32) | FP32 | consumer unidentified |
+| `P` | C2 | FP8 | |
+| `g2` | 2C | FP16 | |
+
+Closed form: **`R(C) = 9C^2 + 388C + 48 + max(16, C/8)`** for C >= 64, and
+**`R(32) = 8C^2 + 388C + 48 + 16`** because the `A2` slab is genuinely absent at the narrowest
+width. Downsample blocks append one `2C^2` FP8 tensor; upsample blocks prepend one.
+
+### The falsification test
+
+`dlssnr_model.py check` builds every blob size from the schema and compares:
+
+```
+blobs   predicted  153   observed  153
+bytes   predicted  147,683,778   observed  147,683,778   residual 0
+```
+
+Every one of the 24 distinct sizes matches in count and in bytes. A wrong schema does not survive
+this - the four narrow widths are constrained by four independent byte counts and one formula.
+
+### "Conv shell" was the wrong name
+
+**No FP8 slab in the model is divisible by 9**, and none carries any k^2 factor
+(262,144 % 9 = 1, 32,768 % 9 = 8, 65,536 % 9 = 7, 196,608 % 9 = 3). There is no 3x3 convolution
+anywhere. The outer tiers run the *same* block schema as the dim-512 transformer, just narrower. The
+name came from the `k_conv_*` kernel symbols and is misleading.
+
+Width ladder, closed at both ends, each rung an exact `2C^2` FP8 tensor:
+`stem -> 32 -> 64 -> 128 -> 256 -> 512 -> 1024 -> 512 -> 256 -> 128 -> 64 -> 32 -> 4 out`.
+Independent support: `k_swin_var` exists in exactly five instantiations - `<32,true>`, `<32,false>`,
+`<64,false>`, `<128,false>`, `<256,false>` - and there is no `<512>`.
+
+### A premise that turned out to be false
+
+The obvious route was "count pointers in each kernel's argument struct; that is the number of
+sub-tensors". It is wrong. **Every conv/attention kernel takes exactly ONE weight pointer** and
+derives all sub-tensor bases from it by compile-time displacement. `k_swin_1h_32_fp8` loads one
+64-bit value from kernarg `0x10` and reaches all seven of its sub-tensors by `s_add_nc_u64`
+immediates: `+0`, `+0x1000`, `+0x2060`, `+0x4c70`, `+0x2c60`, plus two `global_load_u16` at
+`offset:8208` / `offset:20592`. The other pointers in a struct are activation in/out/residual
+buffers.
+
+Those displacements are the strongest corroboration in this analysis: **every sub-tensor base
+measured from the weight bytes also appears as a literal immediate in the RDNA4 disassembly, and
+every padding offset is absent** because padding is never addressed. Two fully independent sources
+agree to the byte on 7/7 bases in `k_swin_1h_32_fp8`, 7/7 in `k_pre_block`, 9/9 in `k_post_block`.
+
+### Class totals
+
+143,831,040 B of FP8 weights (97.4% of payload), 1,923,753 FP16 values, 714 FP32 values,
+2,376 B of zero padding.
+
+### Still missing for a forward pass
+
+Byte extents and dtypes are settled. What is missing is shape and semantics:
+
+1. **Factorisation of nearly every FP8 slab.** Only `A0` and `Q` have an ISA-proven row stride, and
+   only at C=32. `262,144 B` is equally `1024x256`, `512x512` or `4x(256x256)` and nothing in the
+   container picks one.
+2. **What `A1` is** - 128C FP8 in every narrow block, absent at 512 and 1024.
+3. **What `T` is** - 128C FP16 values, all <= 0 with max exactly 0.0, added pre-exponential into an
+   attention-score accumulator. A quarter to two-fifths of a narrow block's bytes, unexplained.
+4. **Runtime dimensions of `k_swin_var`** - window size, token blocking, shift schedule, per-launch
+   channel counts. All arrive from the host in a 168-byte `VarParams`, so the C = 64/128/256 tiers
+   have no ISA-visible dimensions at all.
+5. **Kernel-to-blob binding.** No symbol ties any kernel to any blob; every binding is inference from
+   constant coincidence.
+
+### Highest-value next step
+
+Recover `VarParams` (168 B) from `version.dll` itself - the host-side launch descriptor for
+`k_swin_var`. It carries, as literal host constants, everything item 4 is missing and most of items 1
+and 5, and it would put the wide tiers on the same ISA-grade footing the C=32 tier already has. It is
+purely static and purely local. Anchor on the `k_swin_var` mangled-name strings and the
+`hipModuleGetFunction` / launch call sites, then read the stores into the 168-byte argument buffer.
